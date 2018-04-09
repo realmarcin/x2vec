@@ -1,0 +1,2 @@
+model_checkpoint_path: "/Users/marcin/Documents/VIMSS/ontology/NCATS/x2vec/log/model.ckpt"
+all_model_checkpoint_paths: "/Users/marcin/Documents/VIMSS/ontology/NCATS/x2vec/log/model.ckpt"

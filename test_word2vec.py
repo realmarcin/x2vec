@@ -34,6 +34,13 @@ import tensorflow as tf
 
 from tensorflow.contrib.tensorboard.plugins import projector
 
+from gensim.models import KeyedVectors
+import numpy as np
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+import tensorlayer as tl
+
+
 # Give a folder path as an argument with '--log_dir' to save
 # TensorBoard summaries. Default is a log folder in current directory.
 current_path = os.path.dirname(os.path.realpath(sys.argv[0]))
@@ -51,7 +58,8 @@ if not os.path.exists(FLAGS.log_dir):
   os.makedirs(FLAGS.log_dir)
 
 # Step 1: Download the data.
-url = 'http://mattmahoney.net/dc/'
+#url = 'http://mattmahoney.net/dc/'
+url = 'http://genomics.lbl.gov/~marcin/'
 
 
 # pylint: disable=redefined-outer-name
@@ -71,7 +79,8 @@ def maybe_download(filename, expected_bytes):
   return local_filename
 
 
-filename = maybe_download('text8.zip', 31344016)
+filename = maybe_download('disease__by__HPO_matrix_v3_labeled.txt_for2vec.txt.zip', 1550980)
+#filename = maybe_download('text8.zip', 31344016)
 
 
 # Read the data into a list of strings.
@@ -86,7 +95,7 @@ vocabulary = read_data(filename)
 print('Data size', len(vocabulary))
 
 # Step 2: Build the dictionary and replace rare words with UNK token.
-vocabulary_size = 50000
+vocabulary_size = 1000#50000
 
 
 def build_dataset(words, n_words):
@@ -151,6 +160,26 @@ def generate_batch(batch_size, num_skips, skip_window):
   # Backtrack a little bit to avoid skipping words in the end of a batch
   data_index = (data_index + len(data) - span) % len(data)
   return batch, labels
+
+# pylint: disable=missing-docstring
+# Function to draw visualization of distance between embeddings.
+def plot_with_labels(low_dim_embs, labels, filename):
+  assert low_dim_embs.shape[0] >= len(labels), 'More labels than embeddings'
+  plt.figure(figsize=(18, 18))  # in inches
+  for i, label in enumerate(labels):
+    x, y = low_dim_embs[i, :]
+    plt.scatter(x, y)
+    plt.annotate(
+        label,
+        xy=(x, y),
+        xytext=(5, 2),
+        textcoords='offset points',
+        ha='right',
+        va='bottom')
+
+  plt.savefig(filename)
+
+
 
 
 batch, labels = generate_batch(batch_size=8, num_skips=2, skip_window=1)
@@ -224,7 +253,7 @@ with graph.as_default():
     optimizer = tf.train.GradientDescentOptimizer(1.0).minimize(loss)
 
   # Compute the cosine similarity between minibatch examples and all embeddings.
-  norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
+  norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keepdims=True))
   normalized_embeddings = embeddings / norm
   valid_embeddings = tf.nn.embedding_lookup(normalized_embeddings,
                                             valid_dataset)
@@ -292,15 +321,41 @@ with tf.Session(graph=graph) as session:
         nearest = (-sim[i, :]).argsort()[1:top_k + 1]
         log_str = 'Nearest to %s:' % valid_word
         for k in xrange(top_k):
-          close_word = reverse_dictionary[nearest[k]]
-          log_str = '%s %s,' % (log_str, close_word)
-        print(log_str)
+          try:
+            close_word = reverse_dictionary[nearest[k]]
+            log_str = '%s %s,' % (log_str, close_word)
+            print(log_str)
+          except KeyError:
+            print("KeyError "+str(k)+"\t"+str(nearest[k]))
+
   final_embeddings = normalized_embeddings.eval()
+
+  try:
+    # pylint: disable=g-import-not-at-top
+    from sklearn.manifold import TSNE
+    import matplotlib.pyplot as plt
+
+    tsne = TSNE(
+      perplexity=30, n_components=2, init='pca', n_iter=5000, method='exact')
+    plot_only = 500
+    low_dim_embs = tsne.fit_transform(final_embeddings[:plot_only, :])
+    labels = [reverse_dictionary[i] for i in xrange(plot_only)]
+    plot_with_labels(low_dim_embs, labels, os.path.join(gettempdir(), 'tsne.png'))
+
+  except ImportError as ex:
+    print('Please install sklearn, matplotlib, and scipy to show embeddings.')
+    print(ex)
+
+  tl.visualize.tsne_embedding(final_embeddings, reverse_dictionary, plot_only=500, second=5, saveable=False,
+                              name='word2vec_basic')
 
   # Write corresponding labels for the embeddings.
   with open(FLAGS.log_dir + '/metadata.tsv', 'w') as f:
     for i in xrange(vocabulary_size):
-      f.write(reverse_dictionary[i] + '\n')
+      try:
+        f.write(reverse_dictionary[i] + '\n')
+      except KeyError:
+        print("KeyError write " + str(i))# + "\t" + str(reverse_dictionary[i]))
 
   # Save the model for checkpoints.
   saver.save(session, os.path.join(FLAGS.log_dir, 'model.ckpt'))
@@ -314,40 +369,27 @@ with tf.Session(graph=graph) as session:
 
 writer.close()
 
+
+
+
+
+
+#tsne = TSNE(perplexity=30.0, n_components=2, init='pca', n_iter=5000)
+#low_dim_embedding = tsne.fit_transform(final_embeddings)
+
+# Finally plotting and saving the fig
+#plot_with_labels(low_dim_embedding, words)
+
+
 # Step 6: Visualize the embeddings.
+#print()
+#tl.visualize.tsne_embedding(final_embeddings, reverse_dictionary, plot_only=500, second=5, saveable=False,
+#                            name='word2vec_basic')
+
+#
 
 
-# pylint: disable=missing-docstring
-# Function to draw visualization of distance between embeddings.
-def plot_with_labels(low_dim_embs, labels, filename):
-  assert low_dim_embs.shape[0] >= len(labels), 'More labels than embeddings'
-  plt.figure(figsize=(18, 18))  # in inches
-  for i, label in enumerate(labels):
-    x, y = low_dim_embs[i, :]
-    plt.scatter(x, y)
-    plt.annotate(
-        label,
-        xy=(x, y),
-        xytext=(5, 2),
-        textcoords='offset points',
-        ha='right',
-        va='bottom')
 
-  plt.savefig(filename)
+#plot_with_labels()
 
 
-try:
-  # pylint: disable=g-import-not-at-top
-  from sklearn.manifold import TSNE
-  import matplotlib.pyplot as plt
-
-  tsne = TSNE(
-      perplexity=30, n_components=2, init='pca', n_iter=5000, method='exact')
-  plot_only = 500
-  low_dim_embs = tsne.fit_transform(final_embeddings[:plot_only, :])
-  labels = [reverse_dictionary[i] for i in xrange(plot_only)]
-  plot_with_labels(low_dim_embs, labels, os.path.join(gettempdir(), 'tsne.png'))
-
-except ImportError as ex:
-  print('Please install sklearn, matplotlib, and scipy to show embeddings.')
-  print(ex)
