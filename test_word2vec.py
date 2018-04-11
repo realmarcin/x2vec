@@ -79,7 +79,9 @@ def maybe_download(filename, expected_bytes):
   return local_filename
 
 
-filename = maybe_download('disease__by__HPO_matrix_v3_labeled.txt_for2vec.txt.zip', 1550980)
+#filename = maybe_download('disease__by__HPO_matrix_v3_labeled.txt_for2vec.txt.zip', 1550980)#1355445)
+#filename = 'disease__by__HPO_matrix_v3_labeled.txt_for2vec.txt.zip'#1355445)
+filename = 'disease__by__HPO_matrix_v3_labeled.txt_for2vec.txt_sentence.zip'#1355445)
 #filename = maybe_download('text8.zip', 31344016)
 
 
@@ -95,11 +97,12 @@ vocabulary = read_data(filename)
 print('Data size', len(vocabulary))
 
 # Step 2: Build the dictionary and replace rare words with UNK token.
-vocabulary_size = 1000#50000
+vocabulary_size = 50000#50000
 
 
 def build_dataset(words, n_words):
   """Process raw inputs into a dataset."""
+  print("build_dataset")
   count = [['UNK', -1]]
   count.extend(collections.Counter(words).most_common(n_words - 1))
   dictionary = dict()
